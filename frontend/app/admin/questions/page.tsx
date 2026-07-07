@@ -19,7 +19,13 @@ type Question = {
   created_at: string;
 };
 
-const GRADE_LABEL: Record<string, string>  = { kg2: 'อนุบาล 2', p2: 'ประถม 2' };
+export const GRADES = [
+  { v: 'kg1', l: 'อนุบาล 1' }, { v: 'kg2', l: 'อนุบาล 2' }, { v: 'kg3', l: 'อนุบาล 3' },
+  { v: 'p1', l: 'ประถม 1' }, { v: 'p2', l: 'ประถม 2' }, { v: 'p3', l: 'ประถม 3' },
+  { v: 'p4', l: 'ประถม 4' }, { v: 'p5', l: 'ประถม 5' }, { v: 'p6', l: 'ประถม 6' },
+  { v: 'm1', l: 'มัธยม 1' }, { v: 'm2', l: 'มัธยม 2' }, { v: 'm3', l: 'มัธยม 3' },
+];
+export const GRADE_LABEL = Object.fromEntries(GRADES.map(g => [g.v, g.l]));
 const DIFF_OPTS = [
   { v: 'easy', l: '🟢 ง่าย' }, { v: 'medium', l: '🟡 กลาง' }, { v: 'hard', l: '🔴 ยาก' },
 ];
@@ -136,8 +142,7 @@ export default function QuestionsPage() {
               <label className="form-label">ระดับชั้น</label>
               <select className="form-input form-select" value={form.grade}
                       onChange={(e) => setForm({ ...form, grade: e.target.value })}>
-                <option value="kg2">อนุบาล 2</option>
-                <option value="p2">ประถม 2</option>
+                {GRADES.map(g => <option key={g.v} value={g.v}>{g.l}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -181,7 +186,7 @@ export default function QuestionsPage() {
 
       {/* Filter tabs */}
       <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)', flexWrap: 'wrap' }}>
-        {['all', 'kg2', 'p2'].map((g) => (
+        {['all', ...GRADES.map(g => g.v)].map((g) => (
           <button key={g} id={`filter-${g}`} onClick={() => setFilterGrade(g)}
                   style={{ padding: '8px 18px', borderRadius: 'var(--radius-full)',
                            border: '1.5px solid var(--clr-border)', cursor: 'pointer',

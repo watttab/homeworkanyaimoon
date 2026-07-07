@@ -37,6 +37,8 @@ function handleRequest(e) {
       case 'getUsers':       output = getUsers();               break;
       case 'createUser':     output = createUser(body);         break;
       case 'getUser':        output = getUser(params.uid);      break;
+      case 'updateUser':     output = updateUser(body);         break;
+      case 'deleteUser':     output = deleteUser(body);         break;
 
       // Sessions & Answers
       case 'createSession':  output = createSession(body);      break;

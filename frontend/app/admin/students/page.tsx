@@ -10,7 +10,13 @@ import Swal from 'sweetalert2';
 
 const GAS_CONFIGURED = !!process.env.NEXT_PUBLIC_GAS_URL;
 const AVATARS = ['🌙','⭐','🐣','🐥','🐰','🐻','🐼','🦁','🐸','🦊','🐱','🐶'];
-const GRADE_LABEL: Record<string, string> = { kg2: 'อนุบาล 2', p2: 'ประถม 2' };
+export const GRADES = [
+  { v: 'kg1', l: 'อนุบาล 1' }, { v: 'kg2', l: 'อนุบาล 2' }, { v: 'kg3', l: 'อนุบาล 3' },
+  { v: 'p1', l: 'ประถม 1' }, { v: 'p2', l: 'ประถม 2' }, { v: 'p3', l: 'ประถม 3' },
+  { v: 'p4', l: 'ประถม 4' }, { v: 'p5', l: 'ประถม 5' }, { v: 'p6', l: 'ประถม 6' },
+  { v: 'm1', l: 'มัธยม 1' }, { v: 'm2', l: 'มัธยม 2' }, { v: 'm3', l: 'มัธยม 3' },
+];
+export const GRADE_LABEL = Object.fromEntries(GRADES.map(g => [g.v, g.l]));
 const EMPTY_FORM = { name: '', grade: 'kg2', avatar: '🌙' };
 
 const SwalPink = Swal.mixin({
@@ -26,6 +32,7 @@ export default function StudentsPage() {
   const [saving,   setSaving]   = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form,     setForm]     = useState(EMPTY_FORM);
+  const [editUid,  setEditUid]  = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!GAS_CONFIGURED) { setLoading(false); setError('NEXT_PUBLIC_GAS_URL ยังไม่ได้ตั้งค่า'); return; }
@@ -42,16 +49,22 @@ export default function StudentsPage() {
 
   async function save() {
     if (!form.name.trim()) {
-      SwalPink.fire({ icon: 'warning', title: 'กรุณากรอกชื่อเล่นด้วยครับ' });
-      return;
+      return SwalPink.fire({ icon: 'warning', title: 'กรุณากรอกชื่อเล่นด้วยครับ' });
     }
     setSaving(true);
     try {
-      const res = await api.createUser(form);
+      let res;
+      if (editUid) {
+        res = await api.updateUser({ uid: editUid, ...form });
+      } else {
+        res = await api.createUser(form);
+      }
+      
       if (res.success) {
-        await SwalPink.fire({ icon: 'success', title: '✅ เพิ่มโปรไฟล์สำเร็จ!', timer: 1500, showConfirmButton: false });
+        await SwalPink.fire({ icon: 'success', title: `✅ ${editUid ? 'แก้ไข' : 'เพิ่ม'}โปรไฟล์สำเร็จ!`, timer: 1500, showConfirmButton: false });
         await fetchData();
         setShowForm(false);
+        setEditUid(null);
       } else {
         SwalPink.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: res.error || '' });
       }
@@ -60,6 +73,42 @@ export default function StudentsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleDelete(uid: string, name: string) {
+    const result = await SwalPink.fire({
+      title: `ลบโปรไฟล์น้อง${name}?`,
+      text: "ข้อมูลการทำโจทย์จะยังคงอยู่ แต่โปรไฟล์จะหายไปจากหน้าแรก",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'ใช่, ลบเลย',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#FF6B6B'
+    });
+
+    if (result.isConfirmed) {
+      setLoading(true);
+      try {
+        const res = await api.deleteUser(uid);
+        if (res.success) {
+          await SwalPink.fire({ icon: 'success', title: 'ลบสำเร็จ', timer: 1000, showConfirmButton: false });
+          await fetchData();
+        } else {
+          SwalPink.fire({ icon: 'error', title: 'ลบไม่สำเร็จ', text: res.error || '' });
+        }
+      } catch (e) {
+        SwalPink.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: String(e) });
+      } finally {
+        setLoading(false);
+      }
+    }
+  }
+
+  function handleEdit(s: User) {
+    setForm({ name: s.name, grade: s.grade, avatar: s.avatar });
+    setEditUid(s.uid);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   return (
@@ -73,7 +122,7 @@ export default function StudentsPage() {
             {loading ? '⏳' : '🔄'} รีเฟรช
           </button>
           <button id="btn-add-student" className="btn-primary"
-                  onClick={() => { setForm(EMPTY_FORM); setShowForm(true); }}>
+                  onClick={() => { setEditUid(null); setForm(EMPTY_FORM); setShowForm(true); }}>
             + เพิ่มโปรไฟล์
           </button>
         </div>
@@ -97,8 +146,11 @@ export default function StudentsPage() {
       {/* Form */}
       {showForm && (
         <div style={{ background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
-                      borderRadius: 'var(--radius-lg)', padding: 'var(--space-xl)', marginBottom: 'var(--space-xl)' }}>
-          <h2 style={{ marginBottom: 'var(--space-lg)', fontSize: '1.1rem', fontWeight: 700 }}>➕ เพิ่มโปรไฟล์ใหม่</h2>
+                      borderRadius: 'var(--radius-lg)', padding: 'var(--space-xl)', marginBottom: 'var(--space-xl)',
+                      boxShadow: 'var(--shadow-card)' }}>
+          <h2 style={{ marginBottom: 'var(--space-lg)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--clr-pink)' }}>
+            {editUid ? '✏️ แก้ไขโปรไฟล์' : '➕ เพิ่มโปรไฟล์ใหม่'}
+          </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-md)' }}>
             <div className="form-group">
               <label className="form-label">ชื่อเล่น</label>
@@ -109,10 +161,9 @@ export default function StudentsPage() {
               <label className="form-label">ระดับชั้น</label>
               <select className="form-input form-select" value={form.grade}
                       onChange={(e) => setForm({ ...form, grade: e.target.value })}>
-                <option value="kg2">อนุบาล 2</option>
-                <option value="p2">ประถม 2</option>
-                <option value="p3">ประถม 3</option>
-                <option value="m1">มัธยม 1</option>
+                {GRADES.map(g => (
+                  <option key={g.v} value={g.v}>{g.l}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -134,7 +185,7 @@ export default function StudentsPage() {
             <button id="btn-save-student" className="btn-primary" onClick={save} disabled={saving}>
               {saving ? '⏳ กำลังบันทึก...' : '💾 บันทึกไปยัง Sheets'}
             </button>
-            <button className="btn-secondary" onClick={() => setShowForm(false)}>ยกเลิก</button>
+            <button className="btn-secondary" onClick={() => { setShowForm(false); setEditUid(null); }}>ยกเลิก</button>
           </div>
         </div>
       )}
@@ -154,7 +205,14 @@ export default function StudentsPage() {
             <div key={s.uid} id={`student-card-${s.uid}`}
                  style={{ background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
                           borderRadius: 'var(--radius-lg)', padding: 'var(--space-xl)',
-                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-sm)',
+                          position: 'relative' }}>
+              
+              <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8 }}>
+                <button onClick={() => handleEdit(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', opacity: 0.6, transition: 'opacity 0.2s' }} onMouseOver={e => e.currentTarget.style.opacity = '1'} onMouseOut={e => e.currentTarget.style.opacity = '0.6'}>✏️</button>
+                <button onClick={() => handleDelete(s.uid, s.name)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', opacity: 0.6, transition: 'opacity 0.2s' }} onMouseOver={e => e.currentTarget.style.opacity = '1'} onMouseOut={e => e.currentTarget.style.opacity = '0.6'}>🗑️</button>
+              </div>
+
               <div style={{ fontSize: '4rem' }}>{s.avatar}</div>
               <div style={{ fontSize: '1.3rem', fontWeight: 700 }}>{s.name}</div>
               <div style={{ fontSize: '0.9rem', color: 'var(--clr-muted)' }}>

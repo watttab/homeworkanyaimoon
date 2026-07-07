@@ -47,6 +47,10 @@ export const api = {
   getUser: (uid: string) => gasGet<User>('getUser', { uid }),
   createUser: (data: { name: string; grade: string; avatar: string }) =>
     gasPost<User>('createUser', data),
+  updateUser: (data: { uid: string; name?: string; grade?: string; avatar?: string }) =>
+    gasPost<User>('updateUser', data),
+  deleteUser: (uid: string) =>
+    gasPost<{ success: boolean }>('deleteUser', { uid }),
 
   // Sessions
   createSession: (uid: string, date?: string) =>

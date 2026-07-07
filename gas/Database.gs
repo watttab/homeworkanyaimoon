@@ -76,6 +76,37 @@ function createUser(body) {
   return { success: true, data: user };
 }
 
+function updateUser(body) {
+  var sheet = getSheet(SHEETS.USERS);
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var uidCol = headers.indexOf('uid');
+  
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][uidCol] === body.uid) {
+      if (body.name) sheet.getRange(i + 1, headers.indexOf('name') + 1).setValue(body.name);
+      if (body.grade) sheet.getRange(i + 1, headers.indexOf('grade') + 1).setValue(body.grade);
+      if (body.avatar) sheet.getRange(i + 1, headers.indexOf('avatar') + 1).setValue(body.avatar);
+      return { success: true, data: body };
+    }
+  }
+  return { success: false, error: 'User not found' };
+}
+
+function deleteUser(body) {
+  var sheet = getSheet(SHEETS.USERS);
+  var data = sheet.getDataRange().getValues();
+  var uidCol = data[0].indexOf('uid');
+  
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][uidCol] === body.uid) {
+      sheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false, error: 'User not found' };
+}
+
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 
 function createSession(body) {

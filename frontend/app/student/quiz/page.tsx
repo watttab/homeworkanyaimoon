@@ -1,7 +1,7 @@
 /**
  * Quiz Screen — /student/quiz
- * แสดงโจทย์ทีละข้อ ดึงจาก AI API (Gemini)
- * รองรับกระดานทดเลข (Canvas) + แป้นตัวเลข (Numpad)
+ * รองรับกระดานทดเลข (Canvas) พร้อมใช้ AI ตรวจลายมือ
+ * บันทึกผลสอบกลับไปที่ GAS
  */
 'use client';
 
@@ -9,10 +9,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import { generateDailyQuestions, calcDifficulty, type Question } from '@/lib/questions';
+import { api } from '@/lib/gasApi';
 import SignatureCanvas from 'react-signature-canvas';
 import Swal from 'sweetalert2';
 
-type AnswerState = 'idle' | 'correct' | 'incorrect';
+type AnswerState = 'idle' | 'grading' | 'correct' | 'incorrect';
 
 export default function QuizPage() {
   const router     = useRouter();
@@ -27,16 +28,27 @@ export default function QuizPage() {
   const [finished,  setFinished]  = useState(false);
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [loading,   setLoading]   = useState(true);
+  const [sessionId, setSessionId] = useState<string>('');
 
-  // Numpad & Canvas state
-  const [inputValue, setInputValue] = useState('');
+  // Storage for final answers to save to GAS
+  const answersLog = useRef<any[]>([]);
+  
+  // Canvas state
   const sigPad = useRef<any>(null);
+  const [recognizedNum, setRecognizedNum] = useState<number | null>(null);
 
-  // ─── Load Questions ───────────────────────────────────────
-  const fetchQuestions = useCallback(async (difficulty: string) => {
+  // ─── Initialize Session & Load Questions ─────────────────
+  const initQuiz = useCallback(async (difficulty: string) => {
     if (!user) return;
     setLoading(true);
     try {
+      // 1. Create Session
+      const sessRes = await api.createSession(user.uid);
+      if (sessRes.success && sessRes.data) {
+        setSessionId((sessRes.data as any).session_id);
+      }
+
+      // 2. Fetch Questions (now uses API which combines GAS custom + Gemini)
       const res = await fetch(`/api/generate-questions?grade=${user.grade}&diff=${difficulty}`);
       const data = await res.json();
       if (data.success && data.data && data.data.length > 0) {
@@ -45,59 +57,114 @@ export default function QuizPage() {
         throw new Error('API returned empty or failed');
       }
     } catch (e) {
-      console.error('Failed to generate from AI, falling back to local generator', e);
+      console.error('Failed to generate, falling back', e);
       setQuestions(generateDailyQuestions(user.grade, difficulty as any, 10));
     } finally {
       setLoading(false);
       setStartTime(Date.now());
+      answersLog.current = [];
     }
   }, [user]);
 
   useEffect(() => {
     if (!user) { router.replace('/'); return; }
-    fetchQuestions(calcDifficulty(0.5));
-  }, [user, router, fetchQuestions]);
+    initQuiz(calcDifficulty(0.5));
+  }, [user, router, initQuiz]);
 
-  // ─── Handle Answer ────────────────────────────────────────
-  const submitAnswer = useCallback(() => {
+  // ─── Finish Quiz ──────────────────────────────────────────
+  const finishQuiz = useCallback(async (finalScore: number, finalCount: number) => {
+    setFinished(true);
+    addStarsStore(finalScore);
+    
+    // Save to GAS
+    if (sessionId && user) {
+      // Background save to GAS
+      api.saveAnswers({
+        session_id: sessionId,
+        uid: user.uid,
+        answers: answersLog.current
+      }).catch(e => console.error("Error saving answers to GAS:", e));
+      
+      api.addStars(user.uid, finalScore).catch(e => console.error("Error saving stars to GAS:", e));
+    }
+  }, [sessionId, user, addStarsStore]);
+
+  // ─── Handle Answer (AI OCR) ───────────────────────────────
+  const submitAnswer = async () => {
     if (ansState !== 'idle' || !questions[current]) return;
-    if (inputValue === '') return; // ไม่ได้กรอกอะไร
+    if (sigPad.current?.isEmpty()) {
+      Swal.fire({ icon: 'warning', title: 'ยังไม่ได้เขียนตอบ', text: 'เขียนตัวเลขลงบนกระดานก่อนนะครับ', confirmButtonColor: '#FF6B9D' });
+      return;
+    }
 
+    setAnsState('grading');
+    setRecognizedNum(null);
     const q = questions[current];
-    const numericAns = Number(inputValue);
-    const correct = numericAns === q.answer;
     const timeTaken = Math.round((Date.now() - startTime) / 1000);
 
-    setAnsState(correct ? 'correct' : 'incorrect');
-    if (correct) setScore((s) => s + 1);
+    try {
+      // Get base64 image
+      const imageBase64 = sigPad.current.getTrimmedCanvas().toDataURL('image/png');
+      
+      const res = await fetch('/api/grade-handwriting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64 })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        const numericAns = data.recognizedNumber;
+        setRecognizedNum(numericAns);
+        
+        const correct = numericAns === q.answer;
+        setAnsState(correct ? 'correct' : 'incorrect');
+        
+        const newScore = correct ? score + 1 : score;
+        if (correct) setScore(newScore);
 
-    addAnswer({
-      question_json: q,
-      answer: numericAns,
-      is_correct: correct,
-      time_taken_sec: timeTaken,
-    });
+        // Store to local app store
+        addAnswer({
+          question_json: q,
+          answer: numericAns,
+          is_correct: correct,
+          time_taken_sec: timeTaken,
+        });
 
-    if (correct) {
-      // Correct! Play nice animation or just wait a bit
-      setTimeout(nextQuestion, 1200);
-    } else {
-      // Incorrect, let them see it's wrong, then clear
-      setTimeout(() => {
-        setInputValue('');
-        setAnsState('idle');
-        sigPad.current?.clear();
-      }, 1500);
+        // Push to log for GAS
+        answersLog.current.push({
+          question_json: q,
+          answer: numericAns,
+          is_correct: correct,
+          time_taken_sec: timeTaken,
+        });
+
+        if (correct) {
+          setTimeout(() => nextQuestion(newScore), 1500);
+        } else {
+          setTimeout(() => {
+            setAnsState('idle');
+            setRecognizedNum(null);
+            sigPad.current?.clear();
+          }, 2000);
+        }
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (e) {
+      console.error(e);
+      Swal.fire({ icon: 'error', title: 'ตรวจลายมือไม่สำเร็จ', text: 'ลองเขียนใหม่อีกครั้งนะครับ', confirmButtonColor: '#FF6B9D' });
+      setAnsState('idle');
     }
-  }, [ansState, current, questions, startTime, addAnswer, inputValue]);
+  };
 
-  const nextQuestion = () => {
+  const nextQuestion = (currentScore: number) => {
     if (current + 1 >= questions.length) {
-      setFinished(true);
+      finishQuiz(currentScore, questions.length);
     } else {
       setCurrent((c) => c + 1);
       setAnsState('idle');
-      setInputValue('');
+      setRecognizedNum(null);
       sigPad.current?.clear();
       setStartTime(Date.now());
     }
@@ -122,17 +189,6 @@ export default function QuizPage() {
     }
   }, [current, questions, ansState, loading, finished, speak]);
 
-  // ─── Numpad Logic ─────────────────────────────────────────
-  const handleNumpad = (key: string) => {
-    if (ansState !== 'idle') return;
-    if (key === 'del') {
-      setInputValue((v) => v.slice(0, -1));
-    } else {
-      // จำกัดตัวเลขไม่เกิน 4 หลัก
-      setInputValue((v) => (v.length < 4 ? v + key : v));
-    }
-  };
-
 
   // ─── Rendering ────────────────────────────────────────────
   if (!user) return <div style={{ minHeight: '100dvh', background: 'var(--clr-bg)' }} />;
@@ -141,7 +197,7 @@ export default function QuizPage() {
     return (
       <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--clr-bg)' }}>
         <div className="animate-pulse" style={{ fontSize: '4rem', marginBottom: 'var(--space-md)' }}>🤖</div>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--clr-pink)' }}>กำลังให้ AI ช่วยคิดโจทย์...</h2>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--clr-pink)' }}>กำลังโหลด...</h2>
         <p style={{ color: 'var(--clr-muted)', marginTop: 'var(--space-sm)' }}>รอสักครู่นะครับ</p>
       </div>
     );
@@ -149,7 +205,6 @@ export default function QuizPage() {
 
   if (finished) {
     const starsEarned = score;
-    addStarsStore(starsEarned);
     const emoji = score >= 8 ? '🎉' : score >= 5 ? '😊' : '💪';
     const title = score >= 8 ? 'เยี่ยมมาก!' : score >= 5 ? 'ดีมาก!' : 'ลองใหม่นะ!';
 
@@ -163,9 +218,9 @@ export default function QuizPage() {
           <div className="result-actions">
             <button id="btn-play-again" className="btn-primary" onClick={() => {
               setCurrent(0); setScore(0); setAnsState('idle'); setFinished(false);
-              fetchQuestions(calcDifficulty(score / questions.length));
+              initQuiz(calcDifficulty(score / questions.length));
             }}>
-              🔄 ทำชุดใหม่ (AI)
+              🔄 ทำชุดใหม่
             </button>
             <button id="btn-back-dashboard" className="btn-secondary" onClick={() => router.push('/student/dashboard')}>
               ← กลับหน้าหลัก
@@ -179,9 +234,6 @@ export default function QuizPage() {
   const q = questions[current];
   const progress = ((current) / questions.length) * 100;
 
-  // Numpad layout keys
-  const padKeys = ['1','2','3','4','5','6','7','8','9','del','0'];
-
   return (
     <div className="quiz-layout">
       {/* Header */}
@@ -194,8 +246,8 @@ export default function QuizPage() {
         <span className="quiz-counter">{current + 1}/{questions.length}</span>
       </header>
 
-      {/* Main Layout: Top (Question), Middle (Workspace = Canvas + Numpad) */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', maxWidth: 1000, margin: '0 auto', width: '100%' }}>
+      {/* Main Layout */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', maxWidth: 800, margin: '0 auto', width: '100%' }}>
         
         {/* Question Area */}
         <div className="quiz-question-card animate-fadeInUp" style={{ padding: 'var(--space-lg)', flex: 'none' }} key={`q-${current}`}>
@@ -213,62 +265,57 @@ export default function QuizPage() {
           </div>
         </div>
 
-        {/* Workspace: Canvas + Numpad */}
-        <div className="quiz-workspace animate-fadeInUp" style={{ animationDelay: '0.1s' }}>
-          
-          {/* Canvas (Scratchpad) */}
-          <div className="canvas-container">
-            <div className="canvas-header">
-              <span>✍️ กระดานทดเลข</span>
-              <button className="btn-clear-canvas" onClick={() => sigPad.current?.clear()}>
-                🗑️ ลบกระดาน
-              </button>
-            </div>
-            <div className="canvas-wrapper">
-              <SignatureCanvas 
-                ref={sigPad} 
-                penColor="#3D1C35"
-                minWidth={2}
-                maxWidth={4}
-                dotSize={3}
-                canvasProps={{ className: 'sig-canvas' }} 
-              />
-            </div>
+        {/* Canvas Workspace */}
+        <div className="canvas-container animate-fadeInUp" style={{ animationDelay: '0.1s', flex: 1, minHeight: '40vh', border: ansState === 'correct' ? '3px solid var(--clr-mint)' : ansState === 'incorrect' ? '3px solid var(--clr-red)' : '2px dashed var(--clr-border)' }}>
+          <div className="canvas-header">
+            <span>✍️ เขียนคำตอบที่นี่</span>
+            <button className="btn-clear-canvas" onClick={() => sigPad.current?.clear()} disabled={ansState !== 'idle'}>
+              🗑️ ลบกระดาน
+            </button>
           </div>
-
-          {/* Numpad & Submit */}
-          <div className="numpad-container">
-            <div className="numpad-header">คำตอบ</div>
-            <div className={`numpad-display ${ansState}`}>
-              {inputValue || <span style={{ opacity: 0.3 }}>?</span>}
-              
-              {/* Feedback overlay inside display */}
-              {ansState === 'correct' && <div className="numpad-feedback correct">✅ ถูกต้อง!</div>}
-              {ansState === 'incorrect' && <div className="numpad-feedback incorrect">❌ ลองใหม่นะ</div>}
-            </div>
-
-            <div className="numpad-grid">
-              {padKeys.map((k) => (
-                <button 
-                  key={k} 
-                  className={`numpad-btn ${k === 'del' ? 'del' : ''}`}
-                  onClick={() => handleNumpad(k)}
-                  disabled={ansState !== 'idle'}
-                >
-                  {k === 'del' ? '⌫' : k}
-                </button>
-              ))}
-              <button 
-                className="numpad-btn submit" 
-                onClick={submitAnswer}
-                disabled={ansState !== 'idle' || inputValue === ''}
-              >
-                ส่ง
-              </button>
-            </div>
+          <div className="canvas-wrapper" style={{ position: 'relative' }}>
+            <SignatureCanvas 
+              ref={sigPad} 
+              penColor="#3D1C35"
+              minWidth={3}
+              maxWidth={6}
+              dotSize={4}
+              canvasProps={{ className: 'sig-canvas' }} 
+            />
+            
+            {/* Feedback Overlay */}
+            {ansState === 'grading' && (
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.8)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                <div className="animate-pulse" style={{ fontSize: '3rem' }}>🤖</div>
+                <h3 style={{ color: 'var(--clr-pink)', fontWeight: 800 }}>กำลังตรวจลายมือ...</h3>
+              </div>
+            )}
+            {ansState === 'correct' && (
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(125,207,182,0.9)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 10, animation: 'scaleIn 0.3s' }}>
+                <div style={{ fontSize: '4rem' }}>✅</div>
+                <h3 style={{ fontSize: '2rem', fontWeight: 800 }}>เก่งมาก! ({recognizedNum})</h3>
+              </div>
+            )}
+            {ansState === 'incorrect' && (
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,107,107,0.9)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 10, animation: 'scaleIn 0.3s' }}>
+                <div style={{ fontSize: '4rem' }}>❌</div>
+                <h3 style={{ fontSize: '2rem', fontWeight: 800 }}>ลองใหม่นะ</h3>
+                <p style={{ fontSize: '1.2rem', opacity: 0.9 }}>AI อ่านได้เป็น: {recognizedNum === -1 ? 'อ่านไม่ออก' : recognizedNum}</p>
+              </div>
+            )}
           </div>
-
         </div>
+
+        {/* Submit Button */}
+        <button 
+          className="btn-primary" 
+          style={{ padding: 'var(--space-xl)', fontSize: '1.5rem', marginTop: 'var(--space-md)', boxShadow: 'var(--shadow-card)' }}
+          onClick={submitAnswer}
+          disabled={ansState !== 'idle'}
+        >
+          {ansState === 'grading' ? '⏳ กำลังตรวจ...' : '🚀 ส่งคำตอบ'}
+        </button>
+
       </div>
     </div>
   );
