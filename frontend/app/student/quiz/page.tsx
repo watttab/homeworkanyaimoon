@@ -35,7 +35,35 @@ export default function QuizPage() {
   
   // Canvas state
   const sigPad = useRef<any>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [recognizedNum, setRecognizedNum] = useState<number | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 400 });
+
+  // ─── Initialize Canvas Size ───────────────────────────────
+  useEffect(() => {
+    const updateSize = () => {
+      if (wrapperRef.current) {
+        setCanvasSize({
+          width: wrapperRef.current.offsetWidth,
+          height: wrapperRef.current.offsetHeight
+        });
+      }
+    };
+    
+    // Initial size
+    updateSize();
+    
+    // Listen for resize
+    window.addEventListener('resize', updateSize);
+    
+    // Fallback delay to ensure layout is done
+    const timer = setTimeout(updateSize, 100);
+    
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      clearTimeout(timer);
+    };
+  }, []);
 
   // ─── Initialize Session & Load Questions ─────────────────
   const initQuiz = useCallback(async (difficulty: string) => {
@@ -273,14 +301,19 @@ export default function QuizPage() {
               🗑️ ลบกระดาน
             </button>
           </div>
-          <div className="canvas-wrapper" style={{ position: 'relative' }}>
+          <div className="canvas-wrapper" style={{ position: 'relative', flex: 1 }} ref={wrapperRef}>
             <SignatureCanvas 
               ref={sigPad} 
               penColor="#3D1C35"
               minWidth={3}
               maxWidth={6}
               dotSize={4}
-              canvasProps={{ className: 'sig-canvas' }} 
+              clearOnResize={false}
+              canvasProps={{ 
+                className: 'sig-canvas',
+                width: canvasSize.width,
+                height: canvasSize.height
+              }} 
             />
             
             {/* Feedback Overlay */}
