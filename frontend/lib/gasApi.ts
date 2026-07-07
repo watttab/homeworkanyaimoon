@@ -63,6 +63,10 @@ export const api = {
   // Questions
   getQuestions: (params: { grade?: string; topic?: string; difficulty?: string }) =>
     gasGet('getQuestions', params as Record<string, string>),
+  createQuestion: (body: {
+    grade: string; topic: string; operation: string;
+    difficulty: string; content_json: unknown;
+  }) => gasPost('createQuestion', body as Record<string, unknown>),
 
   // Levels
   getLevels: (grade: string) => gasGet('getLevels', { grade }),

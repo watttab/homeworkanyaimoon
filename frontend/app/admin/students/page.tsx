@@ -1,71 +1,93 @@
 /**
  * Admin — โปรไฟล์เด็ก /admin/students
+ * ดึงข้อมูลจริงจาก GAS → Google Sheets
  */
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { api, User } from '@/lib/gasApi';
 
-type Student = {
-  uid: string;
-  name: string;
-  grade: string;
-  avatar: string;
-};
-
-const INIT_STUDENTS: Student[] = [
-  { uid: 'kg2_profile', name: 'น้องมูน',   grade: 'kg2', avatar: '🌙' },
-  { uid: 'p2_profile',  name: 'น้องใยไหม', grade: 'p2',  avatar: '⭐' },
-];
-
-const AVATARS   = ['🌙','⭐','🐣','🐥','🐰','🐻','🐼','🦁','🐸','🦊','🐱','🐶'];
+const GAS_CONFIGURED = !!process.env.NEXT_PUBLIC_GAS_URL;
+const AVATARS = ['🌙','⭐','🐣','🐥','🐰','🐻','🐼','🦁','🐸','🦊','🐱','🐶'];
 const GRADE_LABEL: Record<string, string> = { kg2: 'อนุบาล 2', p2: 'ประถม 2' };
 
+const EMPTY_FORM = { name: '', grade: 'kg2', avatar: '🌙' };
+
 export default function StudentsPage() {
-  const [students, setStudents] = useState<Student[]>(INIT_STUDENTS);
+  const [students, setStudents] = useState<User[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
+  const [saving,   setSaving]   = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing]   = useState<Student | null>(null);
-  const [form, setForm]         = useState({ name: '', grade: 'kg2', avatar: '🌙' });
+  const [form,     setForm]     = useState(EMPTY_FORM);
 
-  function openNew() {
-    setEditing(null); setForm({ name: '', grade: 'kg2', avatar: '🌙' }); setShowForm(true);
-  }
+  const fetchData = useCallback(async () => {
+    if (!GAS_CONFIGURED) { setLoading(false); setError('NEXT_PUBLIC_GAS_URL ยังไม่ได้ตั้งค่า'); return; }
+    setLoading(true); setError(null);
+    try {
+      const res = await api.getUsers();
+      if (res.success && res.data) setStudents(res.data);
+      else setError(res.error || 'ดึงข้อมูลไม่สำเร็จ');
+    } catch (e) { setError('เชื่อมต่อ GAS ไม่สำเร็จ: ' + String(e)); }
+    finally { setLoading(false); }
+  }, []);
 
-  function openEdit(s: Student) {
-    setEditing(s); setForm({ name: s.name, grade: s.grade, avatar: s.avatar }); setShowForm(true);
-  }
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  function save() {
+  async function save() {
     if (!form.name.trim()) return;
-    if (editing) {
-      setStudents((ss) => ss.map((s) => s.uid === editing.uid ? { ...s, ...form } : s));
-    } else {
-      setStudents((ss) => [...ss, { ...form, uid: `user_${Date.now()}` }]);
-    }
-    setShowForm(false);
+    setSaving(true);
+    try {
+      const res = await api.createUser(form);
+      if (res.success) { await fetchData(); setShowForm(false); }
+      else alert('บันทึกไม่สำเร็จ: ' + res.error);
+    } catch (e) { alert('Error: ' + String(e)); }
+    finally { setSaving(false); }
   }
 
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-xl)' }}>
         <h1 className="admin-heading" style={{ margin: 0 }}>👧 โปรไฟล์เด็ก</h1>
-        <button id="btn-add-student" className="btn-primary" onClick={openNew}>+ เพิ่มโปรไฟล์</button>
+        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+          <button id="btn-refresh-students" className="btn-secondary"
+                  style={{ padding: '6px 16px', fontSize: '0.85rem' }}
+                  onClick={fetchData} disabled={loading}>
+            {loading ? '⏳' : '🔄'} รีเฟรช
+          </button>
+          <button id="btn-add-student" className="btn-primary"
+                  onClick={() => { setForm(EMPTY_FORM); setShowForm(true); }}>
+            + เพิ่มโปรไฟล์
+          </button>
+        </div>
       </div>
+
+      {error && (
+        <div style={{ background: 'rgba(255,107,107,0.12)', border: '1px solid var(--clr-red)',
+                      borderRadius: 'var(--radius-md)', padding: 'var(--space-md) var(--space-lg)',
+                      marginBottom: 'var(--space-xl)', color: 'var(--clr-red)', fontSize: '0.9rem' }}>
+          ⚠️ {error}
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ textAlign: 'center', padding: 'var(--space-2xl)', color: 'var(--clr-muted)' }}>
+          <div className="animate-pulse" style={{ fontSize: '2.5rem', marginBottom: 'var(--space-md)' }}>⏳</div>
+          <p>กำลังดึงข้อมูลจาก Google Sheets...</p>
+        </div>
+      )}
 
       {/* Form */}
       {showForm && (
         <div style={{ background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
                       borderRadius: 'var(--radius-lg)', padding: 'var(--space-xl)', marginBottom: 'var(--space-xl)' }}>
-          <h2 style={{ marginBottom: 'var(--space-lg)', fontSize: '1.1rem', fontWeight: 700 }}>
-            {editing ? '✏️ แก้ไขโปรไฟล์' : '➕ เพิ่มโปรไฟล์ใหม่'}
-          </h2>
-
+          <h2 style={{ marginBottom: 'var(--space-lg)', fontSize: '1.1rem', fontWeight: 700 }}>➕ เพิ่มโปรไฟล์ใหม่</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-md)' }}>
             <div className="form-group">
               <label className="form-label">ชื่อเล่น</label>
               <input className="form-input" placeholder="เช่น น้องมูน" value={form.name}
                      onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
-
             <div className="form-group">
               <label className="form-label">ระดับชั้น</label>
               <select className="form-input form-select" value={form.grade}
@@ -77,53 +99,57 @@ export default function StudentsPage() {
               </select>
             </div>
           </div>
-
           <div className="form-group">
             <label className="form-label">เลือกอวาตาร์</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)', marginTop: 'var(--space-xs)' }}>
               {AVATARS.map((av) => (
                 <button key={av} id={`avatar-${av}`} onClick={() => setForm({ ...form, avatar: av })}
-                        style={{
-                          fontSize: '2rem', width: 52, height: 52,
-                          borderRadius: 'var(--radius-sm)',
-                          border: `2px solid ${form.avatar === av ? 'var(--clr-purple)' : 'var(--clr-border)'}`,
-                          background: form.avatar === av ? 'rgba(108,99,255,0.15)' : 'transparent',
-                          cursor: 'pointer', transition: 'all 0.15s',
-                        }}>
+                        style={{ fontSize: '2rem', width: 52, height: 52, borderRadius: 'var(--radius-sm)',
+                                 border: `2px solid ${form.avatar === av ? 'var(--clr-purple)' : 'var(--clr-border)'}`,
+                                 background: form.avatar === av ? 'rgba(108,99,255,0.15)' : 'transparent',
+                                 cursor: 'pointer', transition: 'all 0.15s' }}>
                   {av}
                 </button>
               ))}
             </div>
           </div>
-
           <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-lg)' }}>
-            <button id="btn-save-student" className="btn-primary" onClick={save}>💾 บันทึก</button>
+            <button id="btn-save-student" className="btn-primary" onClick={save} disabled={saving}>
+              {saving ? '⏳ กำลังบันทึก...' : '💾 บันทึกไปยัง Sheets'}
+            </button>
             <button className="btn-secondary" onClick={() => setShowForm(false)}>ยกเลิก</button>
           </div>
         </div>
       )}
 
       {/* Student cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--space-lg)' }}>
-        {students.map((s) => (
-          <div key={s.uid} id={`student-card-${s.uid}`}
-               style={{ background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
-                        borderRadius: 'var(--radius-lg)', padding: 'var(--space-xl)',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-sm)' }}>
-            <div style={{ fontSize: '4rem' }}>{s.avatar}</div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700 }}>{s.name}</div>
-            <div style={{ fontSize: '0.9rem', color: 'var(--clr-muted)' }}>
-              {GRADE_LABEL[s.grade] || s.grade}
+      {!loading && students.length === 0 && !error && (
+        <div style={{ textAlign: 'center', padding: 'var(--space-2xl)', color: 'var(--clr-muted)' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 'var(--space-md)' }}>📭</div>
+          <p style={{ fontWeight: 600 }}>ยังไม่มีโปรไฟล์</p>
+          <p style={{ fontSize: '0.85rem', marginTop: 'var(--space-xs)' }}>กด &quot;+ เพิ่มโปรไฟล์&quot; เพื่อเริ่มต้นครับ</p>
+        </div>
+      )}
+
+      {!loading && students.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--space-lg)' }}>
+          {students.map((s) => (
+            <div key={s.uid} id={`student-card-${s.uid}`}
+                 style={{ background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
+                          borderRadius: 'var(--radius-lg)', padding: 'var(--space-xl)',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-sm)' }}>
+              <div style={{ fontSize: '4rem' }}>{s.avatar}</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 700 }}>{s.name}</div>
+              <div style={{ fontSize: '0.9rem', color: 'var(--clr-muted)' }}>
+                {GRADE_LABEL[s.grade] || s.grade}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--clr-muted)', marginTop: 'var(--space-xs)' }}>
+                สร้างเมื่อ {s.created_at ? new Date(s.created_at).toLocaleDateString('th-TH') : '-'}
+              </div>
             </div>
-            <button id={`edit-student-${s.uid}`}
-                    className="btn-secondary"
-                    style={{ marginTop: 'var(--space-sm)', padding: '6px 20px', fontSize: '0.9rem' }}
-                    onClick={() => openEdit(s)}>
-              ✏️ แก้ไข
-            </button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
