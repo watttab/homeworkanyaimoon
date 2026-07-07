@@ -21,11 +21,12 @@ export async function POST(req: NextRequest) {
     // We need to strip the prefix for Gemini
     const base64Data = imageBase64.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
 
-    const prompt = `You are an expert handwriting recognition AI. 
+    const prompt = `You are a lenient kindergarten teacher reading a child's handwriting. 
+The image contains a handwritten number. It might be messy, squiggly, or drawn with thick strokes.
 Read the number written in this image. 
 Respond ONLY with the digits (0-9). 
 Do not include any words, punctuation, or markdown.
-If the image is empty, blank, or you cannot read a number, respond with -1.`;
+If the image is completely empty or it is absolutely impossible to guess the number, respond with -1.`;
 
     const imagePart = {
       inlineData: {

@@ -338,9 +338,10 @@ export default function QuizPage() {
             <SignatureCanvas 
               ref={sigPad} 
               penColor="#3D1C35"
+              backgroundColor="rgba(255, 255, 255, 1)"
               minWidth={3}
-              maxWidth={6}
-              dotSize={4}
+              maxWidth={8}
+              dotSize={6}
               clearOnResize={false}
               canvasProps={{ 
                 className: 'sig-canvas',
