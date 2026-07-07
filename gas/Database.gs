@@ -297,6 +297,50 @@ function addStars(body) {
   return { success: true, total_stars: body.stars || 0 };
 }
 
+function buyAvatar(body) {
+  var uid = body.uid;
+  var avatar = body.avatar;
+  var price = body.price;
+  
+  var starsData = getStars(uid);
+  var currentStars = starsData.data.total_stars || 0;
+  
+  if (currentStars < price) {
+    return { success: false, error: 'ดาวไม่พอครับ' };
+  }
+  
+  // Deduct stars
+  addStars({ uid: uid, stars: -price });
+  
+  // Store inventory in Users sheet if we want, or just update avatar
+  var userSheet = getSheet(SHEETS.USERS);
+  var userData = userSheet.getDataRange().getValues();
+  var userHeaders = userData[0];
+  var uCol = userHeaders.indexOf('uid');
+  var invCol = userHeaders.indexOf('inventory');
+  
+  if (invCol === -1) {
+    // Dynamically add inventory column
+    invCol = userHeaders.length;
+    userSheet.getRange(1, invCol + 1).setValue('inventory');
+  }
+  
+  for (var i = 1; i < userData.length; i++) {
+    if (userData[i][uCol] === uid) {
+      // Update avatar
+      userSheet.getRange(i + 1, userHeaders.indexOf('avatar') + 1).setValue(avatar);
+      
+      // Update inventory
+      var currentInv = userData[i][invCol] ? String(userData[i][invCol]) : 'default';
+      if (currentInv.indexOf(avatar) === -1) {
+        userSheet.getRange(i + 1, invCol + 1).setValue(currentInv + ',' + avatar);
+      }
+      return { success: true, new_stars: currentStars - price };
+    }
+  }
+  return { success: false, error: 'User not found' };
+}
+
 // ─── Admin Dashboard ──────────────────────────────────────────────────────────
 
 function getDashboard(uid) {

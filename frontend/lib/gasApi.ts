@@ -39,6 +39,7 @@ export type User = {
   name: string;
   grade: string;
   avatar: string;
+  inventory?: string;
   created_at: string;
 };
 
@@ -98,6 +99,8 @@ export const api = {
   // Stars
   getStars: (uid: string) => gasGet('getStars', { uid }),
   addStars: (uid: string, stars: number) => gasPost('addStars', { uid, stars }),
+  buyAvatar: (uid: string, avatar: string, price: number) => 
+    gasPost<{ success: boolean; new_stars?: number; error?: string }>('buyAvatar', { uid, avatar, price }),
 
   // Dashboard
   getDashboard: (uid: string) => gasGet('getDashboard', { uid }),

@@ -59,6 +59,7 @@ function handleRequest(e) {
       // Stars & Achievements
       case 'getStars':       output = getStars(params.uid);     break;
       case 'addStars':       output = addStars(body);           break;
+      case 'buyAvatar':      output = buyAvatar(body);          break;
 
       // Admin
       case 'getDashboard':   output = getDashboard(params.uid); break;

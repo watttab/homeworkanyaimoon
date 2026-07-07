@@ -28,6 +28,7 @@ export default function QuizPage() {
   const [finished,  setFinished]  = useState(false);
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [loading,   setLoading]   = useState(true);
+  const [hintLoading, setHintLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
 
   // Storage for final answers to save to GAS
@@ -98,6 +99,38 @@ export default function QuizPage() {
     if (!user) { router.replace('/'); return; }
     initQuiz(calcDifficulty(0.5));
   }, [user, router, initQuiz]);
+
+  const handleHint = async () => {
+    const currentQ = questions[current];
+    if (!currentQ || hintLoading) return;
+    setHintLoading(true);
+    try {
+      const res = await fetch('/api/get-hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionText: currentQ.questionText,
+          grade: user?.grade,
+          difficulty: 'medium'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        Swal.fire({
+          title: '💡 คำใบ้จากคุณครู AI',
+          html: `<div style="font-size: 1.2rem; line-height: 1.5; padding: 10px; text-align: left;">${data.hint.replace(/\n/g, '<br/>')}</div>`,
+          confirmButtonText: 'เข้าใจแล้ว!',
+          confirmButtonColor: 'var(--clr-pink)'
+        });
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'ขอคำใบ้ไม่สำเร็จ', text: String(e), confirmButtonColor: 'var(--clr-pink)' });
+    } finally {
+      setHintLoading(false);
+    }
+  };
 
   // ─── Finish Quiz ──────────────────────────────────────────
   const finishQuiz = useCallback(async (finalScore: number, finalCount: number) => {
