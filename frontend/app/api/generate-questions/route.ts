@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     let prompt = `คุณเป็นคุณครูสอนคณิตศาสตร์เด็กประถมและอนุบาล
 สร้างโจทย์คณิตศาสตร์จำนวน ${needed} ข้อ สำหรับเด็กระดับชั้น ${grade}
