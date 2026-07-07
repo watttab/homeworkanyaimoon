@@ -6,12 +6,18 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { api, User } from '@/lib/gasApi';
+import Swal from 'sweetalert2';
 
 const GAS_CONFIGURED = !!process.env.NEXT_PUBLIC_GAS_URL;
 const AVATARS = ['🌙','⭐','🐣','🐥','🐰','🐻','🐼','🦁','🐸','🦊','🐱','🐶'];
 const GRADE_LABEL: Record<string, string> = { kg2: 'อนุบาล 2', p2: 'ประถม 2' };
-
 const EMPTY_FORM = { name: '', grade: 'kg2', avatar: '🌙' };
+
+const SwalPink = Swal.mixin({
+  confirmButtonColor: '#FF6B9D',
+  cancelButtonColor:  '#e0c0cc',
+  background: '#fff', color: '#3D1C35',
+});
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<User[]>([]);
@@ -35,14 +41,25 @@ export default function StudentsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   async function save() {
-    if (!form.name.trim()) return;
+    if (!form.name.trim()) {
+      SwalPink.fire({ icon: 'warning', title: 'กรุณากรอกชื่อเล่นด้วยครับ' });
+      return;
+    }
     setSaving(true);
     try {
       const res = await api.createUser(form);
-      if (res.success) { await fetchData(); setShowForm(false); }
-      else alert('บันทึกไม่สำเร็จ: ' + res.error);
-    } catch (e) { alert('Error: ' + String(e)); }
-    finally { setSaving(false); }
+      if (res.success) {
+        await SwalPink.fire({ icon: 'success', title: '✅ เพิ่มโปรไฟล์สำเร็จ!', timer: 1500, showConfirmButton: false });
+        await fetchData();
+        setShowForm(false);
+      } else {
+        SwalPink.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: res.error || '' });
+      }
+    } catch (e) {
+      SwalPink.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: String(e) });
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
