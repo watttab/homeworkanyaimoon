@@ -37,8 +37,18 @@ async function gasPost<T>(action: string, body: Record<string, unknown> = {}): P
 export type User = {
   uid: string;
   name: string;
-  grade: 'kg2' | 'p2';
+  grade: string;
   avatar: string;
+  created_at: string;
+};
+
+export type Level = {
+  level_id: string;
+  grade: string;
+  topic: string;
+  level_no: number;
+  name: string;
+  pass_score: number;
   created_at: string;
 };
 
@@ -76,7 +86,13 @@ export const api = {
   }) => gasPost('createQuestion', body as Record<string, unknown>),
 
   // Levels
-  getLevels: (grade: string) => gasGet('getLevels', { grade }),
+  getLevels: (grade?: string) => gasGet<Level[]>('getLevels', grade ? { grade } : {}),
+  createLevel: (data: Omit<Level, 'level_id' | 'created_at'>) =>
+    gasPost<Level>('createLevel', data),
+  updateLevel: (data: Partial<Level> & { level_id: string }) =>
+    gasPost<Level>('updateLevel', data),
+  deleteLevel: (level_id: string) =>
+    gasPost<{ success: boolean; message: string }>('deleteLevel', { level_id }),
   getUserProgress: (uid: string) => gasGet('getUserProgress', { uid }),
 
   // Stars

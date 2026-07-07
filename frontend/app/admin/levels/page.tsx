@@ -18,7 +18,13 @@ type Level = {
 };
 
 const GAS_CONFIGURED = !!process.env.NEXT_PUBLIC_GAS_URL;
-const GRADE_LABEL: Record<string, string> = { kg2: '🌙 อนุบาล 2', p2: '⭐ ประถม 2' };
+const GRADES = [
+  { v: 'kg1', l: 'อนุบาล 1' }, { v: 'kg2', l: 'อนุบาล 2' }, { v: 'kg3', l: 'อนุบาล 3' },
+  { v: 'p1', l: 'ประถม 1' }, { v: 'p2', l: 'ประถม 2' }, { v: 'p3', l: 'ประถม 3' },
+  { v: 'p4', l: 'ประถม 4' }, { v: 'p5', l: 'ประถม 5' }, { v: 'p6', l: 'ประถม 6' },
+  { v: 'm1', l: 'มัธยม 1' }, { v: 'm2', l: 'มัธยม 2' }, { v: 'm3', l: 'มัธยม 3' },
+];
+const GRADE_LABEL: Record<string, string> = GRADES.reduce((acc, g) => ({ ...acc, [g.v]: g.l }), {});
 const TOPIC_LABEL: Record<string, string> = {
   addition: '➕ บวก', subtraction: '➖ ลบ',
   multiplication: '✖️ คูณ', division: '➗ หาร',
@@ -32,7 +38,7 @@ export default function LevelsPage() {
   const [error,    setError]    = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving,   setSaving]   = useState(false);
-  const [form,     setForm]     = useState(EMPTY_FORM);
+  const [form,     setForm]     = useState<Partial<Level>>(EMPTY_FORM);
 
   const fetchData = useCallback(async () => {
     if (!GAS_CONFIGURED) {
@@ -52,13 +58,40 @@ export default function LevelsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   async function save() {
-    if (!form.name.trim()) return;
+    if (!form.name || !form.name.trim()) return;
     setSaving(true);
     try {
-      // GAS createQuestion repurposed — หรือเพิ่ม action createLevel ภายหลัง
-      // ตอนนี้ append ผ่าน saveAnswers-pattern ที่มี action สำหรับ level
-      alert('⚠️ การบันทึกด่านใหม่ต้องการ GAS endpoint "createLevel" — อยู่ระหว่างพัฒนาครับ\n\nตอนนี้สามารถแก้ไขด่านได้โดยตรงใน Google Sheets ก่อนนะครับ');
-    } finally { setSaving(false); setShowForm(false); }
+      let res;
+      if (form.level_id) {
+        res = await api.updateLevel(form as Level);
+      } else {
+        res = await api.createLevel(form as Omit<Level, 'level_id' | 'created_at'>);
+      }
+      if (res.success) {
+        fetchData();
+        setShowForm(false);
+      } else {
+        alert('เกิดข้อผิดพลาด: ' + res.error);
+      }
+    } catch (e) {
+      alert('Error: ' + String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(level_id: string) {
+    if (!confirm('ยืนยันการลบด่านนี้?')) return;
+    try {
+      const res = await api.deleteLevel(level_id);
+      if (res.success) {
+        fetchData();
+      } else {
+        alert('ลบไม่สำเร็จ: ' + res.error);
+      }
+    } catch (e) {
+      alert('Error: ' + String(e));
+    }
   }
 
   const grouped = levels.reduce<Record<string, Level[]>>((acc, l) => {
@@ -107,8 +140,7 @@ export default function LevelsPage() {
               <label className="form-label">ระดับชั้น</label>
               <select className="form-input form-select" value={form.grade}
                       onChange={(e) => setForm({ ...form, grade: e.target.value })}>
-                <option value="kg2">อนุบาล 2</option>
-                <option value="p2">ประถม 2</option>
+                {GRADES.map(g => <option key={g.v} value={g.v}>{g.l}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -174,7 +206,8 @@ export default function LevelsPage() {
                     <td>{TOPIC_LABEL[lvl.topic] || lvl.topic}</td>
                     <td>{lvl.pass_score}/10</td>
                     <td style={{ fontSize: '0.8rem', color: 'var(--clr-muted)' }}>
-                      {lvl.created_at ? new Date(lvl.created_at).toLocaleDateString('th-TH') : '-'}
+                      <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem', marginRight: '4px' }} onClick={() => { setForm(lvl); setShowForm(true); }}>✏️ แก้ไข</button>
+                      <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem', color: 'var(--clr-red)' }} onClick={() => handleDelete(lvl.level_id)}>🗑️ ลบ</button>
                     </td>
                   </tr>
                 ))}

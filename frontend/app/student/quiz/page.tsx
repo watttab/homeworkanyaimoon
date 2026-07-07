@@ -86,7 +86,7 @@ export default function QuizPage() {
       }
     } catch (e) {
       console.error('Failed to generate, falling back', e);
-      setQuestions(generateDailyQuestions(user.grade, difficulty as any, 10));
+      setQuestions(generateDailyQuestions(user.grade as any, difficulty as any, 10));
     } finally {
       setLoading(false);
       setStartTime(Date.now());

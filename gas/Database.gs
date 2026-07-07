@@ -209,6 +209,59 @@ function getLevels(grade) {
   return { success: true, data: filtered };
 }
 
+function createLevel(body) {
+  var id = generateId('LVL');
+  var now = new Date().toISOString();
+  var level = {
+    level_id: id,
+    grade: body.grade || '',
+    topic: body.topic || '',
+    level_no: body.level_no || 1,
+    name: body.name || '',
+    pass_score: body.pass_score || 7,
+    created_at: now
+  };
+  appendRow(SHEETS.LEVELS, level);
+  return { success: true, data: level };
+}
+
+function updateLevel(body) {
+  var sheet = getSheet(SHEETS.LEVELS);
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var idCol = headers.indexOf('level_id');
+  
+  if (idCol === -1) return { success: false, error: 'Invalid sheet format' };
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][idCol] === body.level_id) {
+      if (body.grade !== undefined) data[i][headers.indexOf('grade')] = body.grade;
+      if (body.topic !== undefined) data[i][headers.indexOf('topic')] = body.topic;
+      if (body.level_no !== undefined) data[i][headers.indexOf('level_no')] = body.level_no;
+      if (body.name !== undefined) data[i][headers.indexOf('name')] = body.name;
+      if (body.pass_score !== undefined) data[i][headers.indexOf('pass_score')] = body.pass_score;
+      
+      sheet.getRange(i + 1, 1, 1, data[i].length).setValues([data[i]]);
+      return { success: true, data: data[i] };
+    }
+  }
+  return { success: false, error: 'Level not found' };
+}
+
+function deleteLevel(body) {
+  var sheet = getSheet(SHEETS.LEVELS);
+  var data = sheet.getDataRange().getValues();
+  var idCol = data[0].indexOf('level_id');
+  
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][idCol] === body.level_id) {
+      sheet.deleteRow(i + 1);
+      return { success: true, message: 'Level deleted' };
+    }
+  }
+  return { success: false, error: 'Level not found' };
+}
+
 function getUserProgress(uid) {
   var answers  = sheetToObjects(getSheet(SHEETS.ANSWERS)).filter(function(a) { return a.uid === uid; });
   var sessions = sheetToObjects(getSheet(SHEETS.SESSIONS)).filter(function(s) { return s.uid === uid; });

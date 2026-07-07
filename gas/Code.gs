@@ -49,8 +49,11 @@ function handleRequest(e) {
       case 'getQuestions':   output = getQuestions(params);     break;
       case 'createQuestion': output = createQuestion(body);     break;
 
-      // Levels & Progress
+      // Levels
       case 'getLevels':      output = getLevels(params.grade);  break;
+      case 'createLevel':    output = createLevel(body);        break;
+      case 'updateLevel':    output = updateLevel(body);        break;
+      case 'deleteLevel':    output = deleteLevel(body);        break;
       case 'getUserProgress':output = getUserProgress(params.uid); break;
 
       // Stars & Achievements
