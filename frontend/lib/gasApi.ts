@@ -1,9 +1,9 @@
 /**
  * GAS API Client — frontend/lib/gasApi.ts
- * Thin wrapper ที่ทุก component เรียกใช้เพื่อติดต่อ GAS Web App
+ * ส่ง request ผ่าน /api/gas proxy (แก้ปัญหา CORS จาก browser → GAS)
+ * GET  → /api/gas?action=xxx&params
+ * POST → /api/gas  body: { action, ...data }
  */
-
-const GAS_URL = process.env.NEXT_PUBLIC_GAS_URL!;
 
 type ApiResponse<T = unknown> = {
   success: boolean;
@@ -11,20 +11,23 @@ type ApiResponse<T = unknown> = {
   error?: string;
 };
 
+// Proxy endpoint — ทำงานทั้ง local dev และ Vercel production
+const PROXY = '/api/gas';
+
 async function gasGet<T>(action: string, params: Record<string, string> = {}): Promise<ApiResponse<T>> {
-  const url = new URL(GAS_URL);
+  const url = new URL(PROXY, window.location.origin);
   url.searchParams.set('action', action);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  Object.entries(params).forEach(([k, v]) => { if (v) url.searchParams.set(k, v); });
 
   const res = await fetch(url.toString(), { cache: 'no-store' });
   return res.json();
 }
 
 async function gasPost<T>(action: string, body: Record<string, unknown> = {}): Promise<ApiResponse<T>> {
-  const res = await fetch(GAS_URL, {
-    method: 'POST',
+  const res = await fetch(PROXY, {
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, ...body }),
+    body:    JSON.stringify({ action, ...body }),
   });
   return res.json();
 }
