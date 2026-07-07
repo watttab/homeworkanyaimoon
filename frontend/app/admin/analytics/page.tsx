@@ -6,6 +6,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/gasApi';
+import Swal from 'sweetalert2';
 
 type Session = {
   session_id: string;
@@ -103,6 +104,38 @@ export default function AnalyticsPage() {
     const idx = kids.findIndex((k) => k.uid === uid);
     return idx === 0 ? 'var(--clr-pink)' : 'var(--clr-purple)';
   }
+
+  const handleAnalyze = async (kid: Kid, kidSessions: Session[]) => {
+    Swal.fire({
+      title: 'กำลังวิเคราะห์...',
+      html: 'ให้ AI คุณครูช่วยสรุปพัฒนาการของน้องให้สักครู่นะครับ 🤖',
+      allowOutsideClick: false,
+      didOpen: () => { Swal.showLoading(); }
+    });
+
+    try {
+      const res = await fetch('/api/analyze-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: kid.name, grade: kid.grade, sessions: kidSessions })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        Swal.fire({
+          title: `✨ สรุปพัฒนาการของน้อง${kid.name}`,
+          html: `<div style="text-align:left; font-size: 1.1rem; line-height: 1.6; padding: 10px;">${data.analysis.replace(/\n/g, '<br/>')}</div>`,
+          icon: 'info',
+          confirmButtonText: 'รับทราบ',
+          confirmButtonColor: 'var(--clr-pink)'
+        });
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: String(e), confirmButtonColor: 'var(--clr-pink)' });
+    }
+  };
 
   // ─── Render ───────────────────────────────────────────────────────
   return (
@@ -217,8 +250,15 @@ export default function AnalyticsPage() {
                       <span style={{ fontWeight: 700, color }}>{avg}%</span>
                     </div>
                     <Bar value={avg} color={color} />
-                    <div style={{ marginTop: 'var(--space-md)', fontSize: '0.85rem', color: 'var(--clr-muted)' }}>
-                      ทำแล้ว {kidSessions.length} ครั้ง · ⭐ {totalStars} ดาว
+                    <div style={{ marginTop: 'var(--space-md)', fontSize: '0.85rem', color: 'var(--clr-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>ทำแล้ว {kidSessions.length} ครั้ง · ⭐ {totalStars} ดาว</span>
+                      <button 
+                        className="btn-primary" 
+                        style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                        onClick={() => handleAnalyze(kid, kidSessions)}
+                      >
+                        ✨ AI วิเคราะห์
+                      </button>
                     </div>
                   </div>
                 );
