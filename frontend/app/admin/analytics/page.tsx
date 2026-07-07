@@ -142,35 +142,39 @@ export default function AnalyticsPage() {
 
       {!loading && !error && (
         <>
-          {/* Kid filter */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)', marginBottom: 'var(--space-xl)' }}>
-            <button id="filter-all" onClick={() => setSelectedKid('all')}
-                    style={{ padding: '8px 20px', borderRadius: 'var(--radius-full)',
-                             border: '1px solid var(--clr-border)', cursor: 'pointer',
-                             background: selectedKid === 'all' ? 'var(--clr-purple)' : 'transparent',
-                             color: selectedKid === 'all' ? '#fff' : 'var(--clr-muted)',
-                             transition: 'all 0.15s', fontSize: '0.9rem' }}>
-              ทั้งหมด ({sessions.length})
-            </button>
-            {kids.map((k, i) => {
-              const count = sessions.filter((s) => s.uid === k.uid).length;
-              const color = i === 0 ? 'var(--clr-pink)' : 'var(--clr-purple)';
-              return (
-                <button key={k.uid} id={`filter-kid-${k.uid}`}
-                        onClick={() => setSelectedKid(k.uid)}
+          {sessions.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <>
+              {/* Kid filter */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)', marginBottom: 'var(--space-xl)' }}>
+                <button id="filter-all" onClick={() => setSelectedKid('all')}
                         style={{ padding: '8px 20px', borderRadius: 'var(--radius-full)',
                                  border: '1px solid var(--clr-border)', cursor: 'pointer',
-                                 background: selectedKid === k.uid ? color : 'transparent',
-                                 color: selectedKid === k.uid ? '#fff' : 'var(--clr-muted)',
+                                 background: selectedKid === 'all' ? 'var(--clr-purple)' : 'transparent',
+                                 color: selectedKid === 'all' ? '#fff' : 'var(--clr-muted)',
                                  transition: 'all 0.15s', fontSize: '0.9rem' }}>
-                  {k.avatar} {k.name} ({count})
+                  ทั้งหมด ({sessions.length})
                 </button>
-              );
-            })}
-          </div>
+                {kids.map((k, i) => {
+                  const count = sessions.filter((s) => s.uid === k.uid).length;
+                  const color = i === 0 ? 'var(--clr-pink)' : 'var(--clr-purple)';
+                  return (
+                    <button key={k.uid} id={`filter-kid-${k.uid}`}
+                            onClick={() => setSelectedKid(k.uid)}
+                            style={{ padding: '8px 20px', borderRadius: 'var(--radius-full)',
+                                     border: '1px solid var(--clr-border)', cursor: 'pointer',
+                                     background: selectedKid === k.uid ? color : 'transparent',
+                                     color: selectedKid === k.uid ? '#fff' : 'var(--clr-muted)',
+                                     transition: 'all 0.15s', fontSize: '0.9rem' }}>
+                      {k.avatar} {k.name} ({count})
+                    </button>
+                  );
+                })}
+              </div>
 
-          {/* Summary stats */}
-          <div className="stats-row" style={{ marginBottom: 'var(--space-xl)' }}>
+              {/* Summary stats */}
+              <div className="stats-row" style={{ marginBottom: 'var(--space-xl)' }}>
             <div className="stat-card">
               <div className="stat-value" style={{ color: 'var(--clr-green)' }}>{avgAccuracy}%</div>
               <div className="stat-label">ความแม่นยำเฉลี่ย</div>
@@ -266,6 +270,8 @@ export default function AnalyticsPage() {
                 </tbody>
               </table>
             </div>
+          )}
+            </>
           )}
         </>
       )}
