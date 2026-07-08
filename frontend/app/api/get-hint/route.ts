@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `คุณเป็นคุณครูอนุบาลและประถมที่ใจดีมากๆ 
 ตอนนี้นักเรียนระดับชั้น ${grade} (ความยาก ${difficulty}) กำลังทำโจทย์คณิตศาสตร์ข้อนี้อยู่:
